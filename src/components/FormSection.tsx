@@ -1,30 +1,138 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FormData } from '../App';
 
 export const FormSection = ({ onSubmitSuccess }: { onSubmitSuccess: (data: FormData) => void }) => {
+  type LocalFormData = {
+    name: string;
+    email: string;
+    phone: string;
+    location: string;
+    linkedin: string;
+    portfolio: string;
+    targetRole: string;
+    industry: string;
+    experiences: {company: string; role: string; duration: string; description: string}[];
+    projects: {name: string; tech: string; description: string}[];
+    skills: string;
+    education: {institution: string; degree: string; year: string}[];
+    certifications: string;
+  };
+
   const [step, setStep] = useState(1);
   const [hasExperience, setHasExperience] = useState(true);
   
   // Track form data for the preview screen
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<LocalFormData>({
     name: '',
     email: '',
-    targetRole: ''
+    phone: '',
+    location: '',
+    linkedin: '',
+    portfolio: '',
+    targetRole: '',
+    industry: '',
+    experiences: [{company: '', role: '', duration: '', description: ''}],
+    projects: [{name: '', tech: '', description: ''}],
+    skills: '',
+    education: [{institution: '', degree: '', year: ''}],
+    certifications: ''
   });
 
-  const nextStep = () => setStep(s => Math.min(s + 1, 4));
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const targetRoleRef = useRef<HTMLInputElement>(null);
+  const companyRef = useRef<HTMLInputElement>(null);
+  const projectNameRef = useRef<HTMLInputElement>(null);
+  const institutionRef = useRef<HTMLInputElement>(null);
+
+  const validateStep = (step: number): Record<string, boolean> => {
+    const errs: Record<string, boolean> = {};
+    if (step === 1) {
+      if (!formData.name.trim()) errs.name = true;
+      if (!formData.email.trim()) errs.email = true;
+      if (!formData.targetRole.trim()) errs.targetRole = true;
+    } else if (step === 2) {
+      if (hasExperience) {
+        if (!formData.experiences[0].company.trim() || !formData.experiences[0].role.trim()) {
+          errs.experience = true;
+        }
+      } else {
+        if (!formData.projects[0].name.trim()) {
+          errs.project = true;
+        }
+      }
+    } else if (step === 3) {
+      if (!formData.education[0].institution.trim() || !formData.education[0].degree.trim()) {
+        errs.education = true;
+      }
+    }
+    return errs;
+  };
+
+  const getRefForField = (field: string) => {
+    switch(field) {
+      case 'name': return nameRef;
+      case 'email': return emailRef;
+      case 'targetRole': return targetRoleRef;
+      case 'experience': return companyRef;
+      case 'project': return projectNameRef;
+      case 'education': return institutionRef;
+      default: return null;
+    }
+  };
+
+  const nextStep = () => {
+    const newErrors = validateStep(step);
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      const firstError = Object.keys(newErrors)[0];
+      const ref = getRefForField(firstError);
+      ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    setStep(s => Math.min(s + 1, 4));
+  };
   const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted to webhook placeholder", formData);
+    
+    const payload = {
+      full_name: formData.name || "",
+      email: formData.email || "",
+      phone: formData.phone || "",
+      location: formData.location || "",
+      linkedin: formData.linkedin || "",
+      portfolio: formData.portfolio || "",
+      target_role: formData.targetRole || "",
+      target_industry: formData.industry || "",
+      summary: "",
+      has_experience: hasExperience !== false,
+      experiences: formData.experiences || [],
+      projects: formData.projects || [],
+      education: formData.education || [],
+      skills: formData.skills || "",
+      certifications: formData.certifications || "",
+    };
+
+    fetch("https://yashbackend.app.n8n.cloud/webhook/resume-intake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch((err) => console.log("Webhook error:", err));
+    
     onSubmitSuccess(formData);
   };
 
-  const InputLabel = ({ children }: { children: React.ReactNode }) => (
+  const InputLabel = ({ children, required = false }: { children: React.ReactNode, required?: boolean }) => (
     <label className="block text-[12px] uppercase text-brand-textSec tracking-[0.1em] mb-2 font-semibold">
       {children}
+      <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${required ? 'bg-red-500/20 text-red-400' : 'bg-gray-500/20 text-gray-400'}`}>
+        {required ? 'Required' : 'Optional'}
+      </span>
     </label>
   );
 
@@ -60,70 +168,102 @@ export const FormSection = ({ onSubmitSuccess }: { onSubmitSuccess: (data: FormD
         </div>
 
         <form onSubmit={handleSubmit}>
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {step === 1 && (
-              <motion.div key="step1" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-6">
+              <motion.div key="step1" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-6">
                 <h3 className="text-2xl font-bold mb-6">Let's start with the basics</h3>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
-                    <InputLabel>Full Name *</InputLabel>
+                    <InputLabel required>Full Name</InputLabel>
                     <input 
-                      required 
                       type="text" 
-                      className={inputClasses} 
+                      className={`${inputClasses} ${errors.name ? 'border-red-500 border-2' : ''}`} 
                       placeholder="Rahul Sharma" 
                       value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      ref={nameRef}
+                      onChange={(e) => { setFormData({...formData, name: e.target.value}); setErrors(prev => ({...prev, name: false})) }}
                     />
                   </div>
                   <div>
-                    <InputLabel>Email Address *</InputLabel>
+                    <InputLabel required>Email Address</InputLabel>
                     <input 
-                      required 
                       type="email" 
-                      className={inputClasses} 
+                      className={`${inputClasses} ${errors.email ? 'border-red-500 border-2' : ''}`} 
                       placeholder="rahul@email.com" 
                       value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      ref={emailRef}
+                      onChange={(e) => { setFormData({...formData, email: e.target.value}); setErrors(prev => ({...prev, email: false})) }}
                     />
+                    {errors.email && <p className="text-red-500 text-sm mt-1">This field is required</p>}
                   </div>
                   <div>
                     <InputLabel>Phone Number</InputLabel>
-                    <input type="tel" className={inputClasses} placeholder="+91 98765 43210" />
-                  </div>
-                  <div>
-                    <InputLabel>City / Location</InputLabel>
-                    <input type="text" className={inputClasses} placeholder="New Delhi, India" />
-                  </div>
-                  <div>
-                    <InputLabel>LinkedIn URL (Optional)</InputLabel>
-                    <input type="url" className={inputClasses} placeholder="linkedin.com/in/rahulsh" />
-                  </div>
-                  <div>
-                    <InputLabel>Portfolio / GitHub (Optional)</InputLabel>
-                    <input type="url" className={inputClasses} placeholder="github.com/rahul" />
-                  </div>
-                  <div>
-                    <InputLabel>Target Job Role *</InputLabel>
                     <input 
-                      required 
-                      type="text" 
+                      type="tel" 
                       className={inputClasses} 
-                      placeholder="Software Engineer / Marketing Manager" 
-                      value={formData.targetRole}
-                      onChange={(e) => setFormData({...formData, targetRole: e.target.value})}
+                      placeholder="Optional - skip if not applicable" 
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     />
                   </div>
                   <div>
+                    <InputLabel>City / Location</InputLabel>
+                    <input 
+                      type="text" 
+                      className={inputClasses} 
+                      placeholder="Optional - skip if not applicable" 
+                      value={formData.location}
+                      onChange={(e) => setFormData({...formData, location: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <InputLabel>LinkedIn URL</InputLabel>
+                    <input 
+                      type="url" 
+                      className={inputClasses} 
+                      placeholder="Optional - skip if not applicable" 
+                      value={formData.linkedin}
+                      onChange={(e) => setFormData({...formData, linkedin: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <InputLabel>Portfolio / GitHub</InputLabel>
+                    <input 
+                      type="url" 
+                      className={inputClasses} 
+                      placeholder="Optional - skip if not applicable" 
+                      value={formData.portfolio}
+                      onChange={(e) => setFormData({...formData, portfolio: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <InputLabel required>Target Job Role</InputLabel>
+                    <input 
+                      type="text" 
+                      className={`${inputClasses} ${errors.targetRole ? 'border-red-500 border-2' : ''}`} 
+                      placeholder="Software Engineer / Marketing Manager" 
+                      value={formData.targetRole}
+                      ref={targetRoleRef}
+                      onChange={(e) => { setFormData({...formData, targetRole: e.target.value}); setErrors(prev => ({...prev, targetRole: false})) }}
+                    />
+                    {errors.targetRole && <p className="text-red-500 text-sm mt-1">This field is required</p>}
+                  </div>
+                  <div>
                     <InputLabel>Industry</InputLabel>
-                    <input type="text" className={inputClasses} placeholder="Technology / Finance / Marketing" />
+                    <input 
+                      type="text" 
+                      className={inputClasses} 
+                      placeholder="Optional - skip if not applicable" 
+                      value={formData.industry}
+                      onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                    />
                   </div>
                 </div>
               </motion.div>
             )}
 
             {step === 2 && (
-              <motion.div key="step2" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-6">
+              <motion.div key="step2" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-6">
                 <h3 className="text-2xl font-bold mb-6">Tell us what you've done</h3>
                 
                 <div className="flex gap-4 mb-8 bg-brand-surface p-1.5 rounded-xl border border-brand-border">
@@ -138,38 +278,113 @@ export const FormSection = ({ onSubmitSuccess }: { onSubmitSuccess: (data: FormD
                 {hasExperience ? (
                   <div className="space-y-6 p-6 border border-brand-border rounded-xl bg-white/[0.01]">
                     <div>
-                      <InputLabel>Company Name</InputLabel>
-                      <input type="text" className={inputClasses} placeholder="TCS / Zomato / Startup Inc" />
+                      <InputLabel required>Company Name</InputLabel>
+                      <input 
+                        type="text" 
+                        className={`${inputClasses} ${errors.experience ? 'border-red-500 border-2' : ''}`} 
+                        placeholder="TCS / Zomato / Startup Inc" 
+                        value={formData.experiences[0].company}
+                        ref={companyRef}
+                        onChange={(e) => { 
+                          const newExp = [...formData.experiences];
+                          newExp[0].company = e.target.value;
+                          setFormData({...formData, experiences: newExp});
+                          setErrors(prev => ({...prev, experience: false}));
+                        }}
+                      />
+                      {errors.experience && <p className="text-red-500 text-sm mt-1">This field is required</p>}
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
-                        <InputLabel>Your Role / Title</InputLabel>
-                        <input type="text" className={inputClasses} placeholder="Frontend Developer" />
+                        <InputLabel required>Your Role / Title</InputLabel>
+                        <input 
+                          type="text" 
+                          className={`${inputClasses} ${errors.experience ? 'border-red-500 border-2' : ''}`} 
+                          placeholder="Frontend Developer" 
+                          value={formData.experiences[0].role}
+                          onChange={(e) => { 
+                            const newExp = [...formData.experiences];
+                            newExp[0].role = e.target.value;
+                            setFormData({...formData, experiences: newExp});
+                            setErrors(prev => ({...prev, experience: false}));
+                          }}
+                        />
                       </div>
                       <div>
                         <InputLabel>Duration</InputLabel>
-                        <input type="text" className={inputClasses} placeholder="Jan 2022 – Mar 2024" />
+                        <input 
+                          type="text" 
+                          className={inputClasses} 
+                          placeholder="Optional - skip if not applicable" 
+                          value={formData.experiences[0].duration}
+                          onChange={(e) => { 
+                            const newExp = [...formData.experiences];
+                            newExp[0].duration = e.target.value;
+                            setFormData({...formData, experiences: newExp});
+                          }}
+                        />
                       </div>
                     </div>
                     <div>
                       <InputLabel>What you did (Rough notes are fine!)</InputLabel>
-                      <textarea className={`${inputClasses} min-h-[120px] resize-y`} placeholder="Write anything — even rough notes. Our AI will rewrite it professionally. Example: 'managed social media, grew followers, handled customer queries'" />
+                      <textarea 
+                        className={`${inputClasses} min-h-[120px] resize-y`} 
+                        placeholder="Optional - skip if not applicable" 
+                        value={formData.experiences[0].description}
+                        onChange={(e) => { 
+                          const newExp = [...formData.experiences];
+                          newExp[0].description = e.target.value;
+                          setFormData({...formData, experiences: newExp});
+                        }}
+                      />
                     </div>
                     <button type="button" className="text-brand-primary text-sm font-medium hover:underline">+ Add Another Job</button>
                   </div>
                 ) : (
                   <div className="space-y-6 p-6 border border-brand-border rounded-xl bg-white/[0.01]">
                     <div>
-                      <InputLabel>Project Name</InputLabel>
-                      <input type="text" className={inputClasses} placeholder="E-commerce Website / ML Model" />
+                      <InputLabel required>Project Name</InputLabel>
+                      <input 
+                        type="text" 
+                        className={`${inputClasses} ${errors.project ? 'border-red-500 border-2' : ''}`} 
+                        placeholder="E-commerce Website / ML Model" 
+                        value={formData.projects[0].name}
+                        ref={projectNameRef}
+                        onChange={(e) => { 
+                          const newProj = [...formData.projects];
+                          newProj[0].name = e.target.value;
+                          setFormData({...formData, projects: newProj});
+                          setErrors(prev => ({...prev, project: false}));
+                        }}
+                      />
+                      {errors.project && <p className="text-red-500 text-sm mt-1">This field is required</p>}
                     </div>
                     <div>
                       <InputLabel>Tech Stack Used</InputLabel>
-                      <input type="text" className={inputClasses} placeholder="React, Node.js, MongoDB" />
+                      <input 
+                        type="text" 
+                        className={inputClasses} 
+                        placeholder="Optional - skip if not applicable" 
+                        value={formData.projects[0].tech}
+                        onChange={(e) => { 
+                          const newProj = [...formData.projects];
+                          newProj[0].tech = e.target.value;
+                          setFormData({...formData, projects: newProj});
+                        }}
+                      />
                     </div>
                     <div>
                       <InputLabel>What it does / Your role</InputLabel>
-                      <textarea className={`${inputClasses} min-h-[120px] resize-y`} placeholder="Describe what you built and the problem it solved..." />
+                      <textarea 
+                        className={`${inputClasses} min-h-[120px] resize-y`} 
+                        placeholder="Optional - skip if not applicable" 
+                        value={formData.projects[0].description}
+                        onChange={(e) => { 
+                          const newProj = [...formData.projects];
+                          newProj[0].description = e.target.value;
+                          setFormData({...formData, projects: newProj});
+                        }}
+                      />
                     </div>
                     <button type="button" className="text-brand-primary text-sm font-medium hover:underline">+ Add Another Project</button>
                   </div>
@@ -178,37 +393,81 @@ export const FormSection = ({ onSubmitSuccess }: { onSubmitSuccess: (data: FormD
             )}
 
             {step === 3 && (
-              <motion.div key="step3" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-6">
+              <motion.div key="step3" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-6">
                 <h3 className="text-2xl font-bold mb-6">Skills & Education</h3>
                 <div>
                   <InputLabel>Skills (Comma separated)</InputLabel>
-                  <textarea className={`${inputClasses} min-h-[100px] resize-y`} placeholder="Python, React, SQL, Communication, Leadership... (just list them, AI will format)" />
+                  <textarea 
+                    className={`${inputClasses} min-h-[100px] resize-y`} 
+                    placeholder="Optional - skip if not applicable" 
+                    value={formData.skills}
+                    onChange={(e) => setFormData({...formData, skills: e.target.value})}
+                  />
                 </div>
                 <div className="p-6 border border-brand-border rounded-xl bg-white/[0.01] space-y-6">
                   <div>
-                    <InputLabel>Institution</InputLabel>
-                    <input type="text" className={inputClasses} placeholder="Delhi University / IIT" />
+                    <InputLabel required>Institution</InputLabel>
+                    <input 
+                      type="text" 
+                      className={`${inputClasses} ${errors.education ? 'border-red-500 border-2' : ''}`} 
+                      placeholder="Delhi University / IIT" 
+                      value={formData.education[0].institution}
+                      ref={institutionRef}
+                      onChange={(e) => { 
+                        const newEdu = [...formData.education];
+                        newEdu[0].institution = e.target.value;
+                        setFormData({...formData, education: newEdu});
+                        setErrors(prev => ({...prev, education: false}));
+                      }}
+                    />
+                    {errors.education && <p className="text-red-500 text-sm mt-1">This field is required</p>}
                   </div>
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
-                      <InputLabel>Degree / Field</InputLabel>
-                      <input type="text" className={inputClasses} placeholder="B.Tech Computer Science" />
+                      <InputLabel required>Degree / Field</InputLabel>
+                      <input 
+                        type="text" 
+                        className={`${inputClasses} ${errors.education ? 'border-red-500 border-2' : ''}`} 
+                        placeholder="B.Tech Computer Science" 
+                        value={formData.education[0].degree}
+                        onChange={(e) => { 
+                          const newEdu = [...formData.education];
+                          newEdu[0].degree = e.target.value;
+                          setFormData({...formData, education: newEdu});
+                          setErrors(prev => ({...prev, education: false}));
+                        }}
+                      />
                     </div>
                     <div>
                       <InputLabel>Graduation Year</InputLabel>
-                      <input type="text" className={inputClasses} placeholder="2024" />
+                      <input 
+                        type="text" 
+                        className={inputClasses} 
+                        placeholder="Optional - skip if not applicable" 
+                        value={formData.education[0].year}
+                        onChange={(e) => { 
+                          const newEdu = [...formData.education];
+                          newEdu[0].year = e.target.value;
+                          setFormData({...formData, education: newEdu});
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
                 <div>
-                  <InputLabel>Certifications (Optional)</InputLabel>
-                  <textarea className={`${inputClasses} min-h-[80px] resize-y`} placeholder="AWS Certified, Google Data Analytics..." />
+                  <InputLabel>Certifications</InputLabel>
+                  <textarea 
+                    className={`${inputClasses} min-h-[80px] resize-y`} 
+                    placeholder="Optional - skip if not applicable" 
+                    value={formData.certifications}
+                    onChange={(e) => setFormData({...formData, certifications: e.target.value})}
+                  />
                 </div>
               </motion.div>
             )}
 
             {step === 4 && (
-              <motion.div key="step4" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-6">
+              <motion.div key="step4" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-6">
                 <h3 className="text-2xl font-bold mb-6">Review & Submit</h3>
                 <div className="bg-brand-surface border border-brand-border rounded-xl p-6 mb-6">
                   <ul className="space-y-3 text-sm text-brand-textSec">
