@@ -118,7 +118,7 @@ export const FormSection = ({ onSubmitSuccess }: { onSubmitSuccess: (data: FormD
       certifications: formData.certifications || "",
     };
 
-    fetch("https://yashagentaicrmm.app.n8n.cloud/webhook/resume-intake", {
+    fetch("https://yashtreein.app.n8n.cloud/webhook/resume-intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
